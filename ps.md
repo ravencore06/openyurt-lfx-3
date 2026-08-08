@@ -1,31 +1,54 @@
+## Background
 
-## Description
-Continuous Integration (CI) pipelines are the backbone of our development, but "flaky" tests—tests that exhibit both false positive and false negative outcomes randomly—severely degrade developer velocity and erode trust in the CI system.
-Currently, our project relies on GitHub Actions for its CI/CD processes. Manually digging through extensive GitHub Actions logs to identify, categorize, and troubleshoot these flaky failures is a massive, time-consuming burden for maintainers.
-This internship aims to solve this by building an intelligent, automated toolchain that monitors our GitHub Actions workflows for flaky behavior and leverages an agentic AI workflow to handle the heavy lifting of analysis. The intern will build a system that automatically extracts failing logs, uses AI agents to reason about the failure (differentiating between infrastructure blips, race conditions, network timeouts, etc.), and surfaces actionable mitigation strategies directly to the maintainers.
+[Claude Code](https://claude.ai/code) is an AI coding assistant that supports **Skills** — slash commands defined as Markdown files in `.claude/commands/`. When a user types `/openyurt-deploy` inside the OpenYurt repository, Claude reads the skill file and executes the described steps interactively on behalf of the user.
 
-## Expected Outcomes
-Data Ingestion Pipeline: A mechanism to automatically fetch, filter, and parse flaky CI run data and logs directly from the GitHub Actions API.
-Agentic Analysis Engine: An integration with an AI/LLM framework designed to read failure logs, categorize the root cause of the flake, and generate a plain-English analysis.
-Mitigation & Reporting: A reporting layer that takes the agent's findings and seamlessly integrates them into the developer workflow (e.g., auto-generating GitHub Issues, compiling weekly flake reports, or posting PR comments with suggested fixes).
-Documentation: Comprehensive documentation covering the architecture of the tool, how to deploy it, and how maintainers can tweak the agent's prompts and behaviors.
+Adding Skills to the OpenYurt repository would lower the barrier for operators who want to deploy OpenYurt or configure Raven on an existing Kubernetes cluster, without needing to read through the full documentation manually.
 
-## Recommended Skills
-Proficiency in Python or Go (for scripting and API interactions).
-Familiarity with GitHub Actions, CI/CD concepts, and log analysis.
-Interest or experience in Generative AI, LLMs, and agentic workflows (prompt engineering, AI tool calling).
-Experience with the GitHub API is a strong plus.
-Familiarity with Local AI is a plus
+## Proposed Skills
 
-## Mentors:
-Paul Holzinger @Luap99 
-Tim Zhou @timcoding1988 
-Mohan Boddu @mohanboddu 
+### `/openyurt-deploy` — Deploy OpenYurt on an existing Kubernetes cluster
 
----
+An interactive skill that:
+1. Checks prerequisites (kubectl, Helm ≥ v3, Kubernetes ≥ 1.24)
+2. Installs `yurt-manager` via Helm
+3. Creates an Edge NodePool CR
+4. Converts nodes to edge nodes using the label-driven `YurtNodeConversionController` mechanism (labels node with `apps.openyurt.io/nodepool=<name>`, waits for node-servant Job to complete)
+5. Enables edge autonomy per node (`node.openyurt.io/autonomy-duration`)
+6. Verifies the `Autonomy` condition on each edge node
 
-IMPORTANT: Please do not spam this issue with comments that you like to participate, the applications are only handled through the LFX program. For specific questions you can reach us on our `#podman-dev:matrix.org` matrix channel. Note, this is a developer focused channel, please avoid spamming it with things not related to our project.
+### `/openyurt-raven` — Configure Raven for cross-region networking
 
-LFX mentorship URL: https://mentorship.lfx.linuxfoundation.org/project/050e89d9-aec2-47ad-9113-3ba41a639d55
+An interactive skill that:
+1. Verifies OpenYurt is already deployed
+2. Installs `raven-agent` DaemonSet via Helm (from the `openyurtio/raven` repository)
+3. Generates a VPN PSK with `openssl rand -hex 64`
+4. Creates Gateway CRs for each NodePool (`raven.openyurt.io/v1beta1`)
+5. Supports both `PublicIP` and `LoadBalancer` expose types
+6. Supports enabling/disabling L3 tunnel and L7 proxy independently
+7. Verifies cross-NodePool connectivity
 
+## Implementation
 
+The implementation adds `.claude/commands/` to the repository root:
+
+```
+.claude/commands/
+├── openyurt-deploy.md
+├── openyurt-raven.md
+└── README.md
+```
+
+These are static Markdown files — no build changes, no code changes. The skills are picked up automatically by Claude Code when working inside the repository.
+
+## Why This Is Useful
+
+- **Lower onboarding friction**: operators can deploy OpenYurt end-to-end with a single slash command, with Claude executing and verifying each step
+- **Accurate and versioned**: skills live in the repo alongside the code, so they can be updated with each release
+- **Handles edge cases**: skills include error handling guidance (e.g. libreswan requirement for Raven, PSK mismatch, conversion Job failure diagnosis)
+
+## Related
+
+- Label-driven node conversion: #2533
+- Native service topology: #2550
+- Helm chart: `charts/yurt-manager/`, `charts/yurthub/`
+- Raven: https://github.com/openyurtio/raven
